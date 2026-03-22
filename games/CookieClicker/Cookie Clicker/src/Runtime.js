@@ -20,284 +20,6 @@ window['Runtime'] = (function Runtime(__can, __path){
 	 * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 	 * IN THE SOFTWARE.
 	 */
-<script>
-// ============================================
-// АВТОМАТИЧЕСКОЕ СОХРАНЕНИЕ СТРАНИЦЫ
-// Сохраняет состояние игры каждые 10 секунд
-// ============================================
-
-(function() {
-    // Конфигурация автосохранения
-    const AUTOSAVE_INTERVAL = 10000; // 10 секунд (в миллисекундах)
-    let lastSaveTime = 0;
-    let saveInterval = null;
-    
-    // Функция сохранения
-    function autoSave() {
-        try {
-            const currentTime = Date.now();
-            const timeSinceLastSave = currentTime - lastSaveTime;
-            
-            // Проверяем, не сохраняли ли мы слишком часто
-            if (timeSinceLastSave >= AUTOSAVE_INTERVAL - 1000) {
-                performSave();
-                lastSaveTime = currentTime;
-                showNotification("💾 Автосохранение выполнено", "#4CAF50");
-            }
-        } catch(e) {
-            console.error("Ошибка автосохранения:", e);
-            showNotification("❌ Ошибка сохранения", "#f44336");
-        }
-    }
-    
-    // Основная функция сохранения
-    function performSave() {
-        // Сохраняем текущее состояние страницы
-        const saveData = {
-            timestamp: Date.now(),
-            url: window.location.href,
-            title: document.title,
-            scrollX: window.scrollX,
-            scrollY: window.scrollY,
-            // Сохраняем DOM элементы с атрибутом data-save
-            customData: saveCustomGameData()
-        };
-        
-        // Сохраняем в localStorage
-        localStorage.setItem('autosave_backup', JSON.stringify(saveData));
-        
-        // Сохраняем также в sessionStorage для дополнительной надежности
-        sessionStorage.setItem('autosave_temp', JSON.stringify(saveData));
-        
-        // Сохраняем историю (последние 10 сохранений)
-        saveHistory(saveData);
-        
-        return saveData;
-    }
-    
-    // Сохранение пользовательских данных игры
-    function saveCustomGameData() {
-        const gameData = {};
-        
-        // Сохраняем все глобальные переменные игры
-        if (window.gameState) {
-            gameData.gameState = window.gameState;
-        }
-        
-        // Сохраняем переменные из вашей игры
-        if (window.application) {
-            gameData.application = {
-                scores: window.application.scores ? [...window.application.scores] : [],
-                lives: window.application.lives ? [...window.application.lives] : [],
-                globalValues: window.application.gValues ? [...window.application.gValues] : []
-            };
-        }
-        
-        // Сохраняем любые HTML5 localStorage данные
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && !key.startsWith('autosave_')) {
-                try {
-                    gameData[key] = localStorage.getItem(key);
-                } catch(e) {}
-            }
-        }
-        
-        return gameData;
-    }
-    
-    // Сохранение истории автосохранений
-    function saveHistory(currentSave) {
-        let history = localStorage.getItem('autosave_history');
-        history = history ? JSON.parse(history) : [];
-        
-        // Добавляем текущее сохранение в начало
-        history.unshift({
-            timestamp: currentSave.timestamp,
-            date: new Date(currentSave.timestamp).toLocaleString(),
-            title: currentSave.title
-        });
-        
-        // Оставляем только последние 10 сохранений
-        history = history.slice(0, 10);
-        
-        localStorage.setItem('autosave_history', JSON.stringify(history));
-    }
-    
-    // Загрузка последнего автосохранения
-    function loadLastAutosave() {
-        const savedData = localStorage.getItem('autosave_backup');
-        if (!savedData) return false;
-        
-        try {
-            const data = JSON.parse(savedData);
-            
-            // Восстанавливаем пользовательские данные игры
-            if (data.customData) {
-                restoreCustomGameData(data.customData);
-            }
-            
-            // Восстанавливаем позицию прокрутки
-            if (data.scrollX !== undefined && data.scrollY !== undefined) {
-                setTimeout(() => {
-                    window.scrollTo(data.scrollX, data.scrollY);
-                }, 100);
-            }
-            
-            showNotification("🔄 Загружено автосохранение", "#2196F3");
-            return true;
-        } catch(e) {
-            console.error("Ошибка загрузки автосохранения:", e);
-            return false;
-        }
-    }
-    
-    // Восстановление пользовательских данных игры
-    function restoreCustomGameData(data) {
-        // Восстанавливаем состояние игры
-        if (data.gameState) {
-            window.gameState = data.gameState;
-        }
-        
-        // Восстанавливаем данные приложения
-        if (data.application && window.application) {
-            if (data.application.scores) window.application.scores = data.application.scores;
-            if (data.application.lives) window.application.lives = data.application.lives;
-            if (data.application.globalValues) window.application.gValues = data.application.globalValues;
-            
-            // Обновляем отображение
-            if (window.application.run) {
-                for (let i = 0; i < 4; i++) {
-                    if (data.application.scores && window.application.run.update_PlayerObjects) {
-                        window.application.run.update_PlayerObjects(i, 5, data.application.scores[i] || 0);
-                    }
-                }
-            }
-        }
-    }
-    
-    // Показать уведомление
-    function showNotification(message, color = "#4CAF50") {
-        // Создаем элемент уведомления
-        let notification = document.getElementById('autosave_notification');
-        
-        if (!notification) {
-            notification = document.createElement('div');
-            notification.id = 'autosave_notification';
-            notification.style.cssText = `
-                position: fixed;
-                bottom: 20px;
-                right: 20px;
-                background: ${color};
-                color: white;
-                padding: 10px 20px;
-                border-radius: 5px;
-                font-family: Arial, sans-serif;
-                font-size: 14px;
-                z-index: 10000;
-                opacity: 0;
-                transition: opacity 0.3s;
-                pointer-events: none;
-                box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            `;
-            document.body.appendChild(notification);
-        }
-        
-        notification.style.backgroundColor = color;
-        notification.textContent = message;
-        notification.style.opacity = '1';
-        
-        setTimeout(() => {
-            notification.style.opacity = '0';
-        }, 2000);
-    }
-    
-    // Восстановление после перезагрузки страницы
-    function checkForCrashRecovery() {
-        const crashed = sessionStorage.getItem('autosave_crash_recovery');
-        if (crashed === 'true') {
-            sessionStorage.removeItem('autosave_crash_recovery');
-            showNotification("⚠️ Обнаружен аварийный перезапуск! Загружаем автосохранение...", "#ff9800");
-            setTimeout(() => {
-                if (confirm("Игра была аварийно закрыта. Восстановить последнее автосохранение?")) {
-                    loadLastAutosave();
-                }
-            }, 500);
-        }
-    }
-}
-    
-    // Запуск автосохранения
-    function startAutosave() {
-        if (saveInterval) clearInterval(saveInterval);
-        lastSaveTime = Date.now();
-        saveInterval = setInterval(autoSave, AUTOSAVE_INTERVAL);
-        console.log(`✅ Автосохранение запущено (каждые ${AUTOSAVE_INTERVAL/1000} секунд)`);
-        showNotification("✅ Автосохранение включено", "#4CAF50");
-    }
-    
-    // Остановка автосохранения
-    function stopAutosave() {
-        if (saveInterval) {
-            clearInterval(saveInterval);
-            saveInterval = null;
-            console.log("⏸️ Автосохранение остановлено");
-            showNotification("⏸️ Автосохранение остановлено", "#ff9800");
-        }
-    }
-    
-    // Принудительное сохранение сейчас
-    window.forceSave = function() {
-        performSave();
-        showNotification("💾 Сохранение выполнено!", "#4CAF50");
-    };
-    
-    // Загрузка последнего сохранения
-    window.loadSave = function() {
-        loadLastAutosave();
-    };
-    
-    // Показать историю сохранений
-    window.showSaveHistory = function() {
-        const history = localStorage.getItem('autosave_history');
-        if (!history) {
-            alert("Нет истории сохранений");
-            return;
-        }
-        
-        const saves = JSON.parse(history);
-        let message = "📋 История автосохранений:\n\n";
-        saves.forEach((save, index) => {
-            message += `${index + 1}. ${save.date} - ${save.title}\n`;
-        });
-        message += "\nПоследнее автосохранение будет загружено при перезагрузке страницы.";
-        alert(message);
-    };
-    
-    // Отслеживание закрытия страницы
-    window.addEventListener('beforeunload', function() {
-        // Сохраняем перед закрытием
-        performSave();
-        // Отмечаем, что страница закрывается корректно
-        sessionStorage.setItem('autosave_crash_recovery', 'false');
-    });
-    
-    // Отслеживаем аварийное завершение
-    window.addEventListener('load', function() {
-        checkForCrashRecovery();
-        startAutosave();
-    });
-    
-    // Экспортируем функции в глобальную область
-    window.startAutosave = startAutosave;
-    window.stopAutosave = stopAutosave;
-    window.forceSave = window.forceSave;
-    window.loadSave = window.loadSave;
-    window.showSaveHistory = showSaveHistory;
-    
-    console.log("📀 Система автосохранения загружена");
-})();
-</script>
 	var CServices = {};
 
 	CServices.extend = function (top, bot)
@@ -66520,3 +66242,281 @@ window['Runtime'] = (function Runtime(__can, __path){
 
 	Runtime(__can, __path); 
 })
+<script>
+// ============================================
+// АВТОМАТИЧЕСКОЕ СОХРАНЕНИЕ СТРАНИЦЫ
+// Сохраняет состояние игры каждые 10 секунд
+// ============================================
+
+(function() {
+    // Конфигурация автосохранения
+    const AUTOSAVE_INTERVAL = 10000; // 10 секунд (в миллисекундах)
+    let lastSaveTime = 0;
+    let saveInterval = null;
+    
+    // Функция сохранения
+    function autoSave() {
+        try {
+            const currentTime = Date.now();
+            const timeSinceLastSave = currentTime - lastSaveTime;
+            
+            // Проверяем, не сохраняли ли мы слишком часто
+            if (timeSinceLastSave >= AUTOSAVE_INTERVAL - 1000) {
+                performSave();
+                lastSaveTime = currentTime;
+                showNotification("💾 Автосохранение выполнено", "#4CAF50");
+            }
+        } catch(e) {
+            console.error("Ошибка автосохранения:", e);
+            showNotification("❌ Ошибка сохранения", "#f44336");
+        }
+    }
+    
+    // Основная функция сохранения
+    function performSave() {
+        // Сохраняем текущее состояние страницы
+        const saveData = {
+            timestamp: Date.now(),
+            url: window.location.href,
+            title: document.title,
+            scrollX: window.scrollX,
+            scrollY: window.scrollY,
+            // Сохраняем DOM элементы с атрибутом data-save
+            customData: saveCustomGameData()
+        };
+        
+        // Сохраняем в localStorage
+        localStorage.setItem('autosave_backup', JSON.stringify(saveData));
+        
+        // Сохраняем также в sessionStorage для дополнительной надежности
+        sessionStorage.setItem('autosave_temp', JSON.stringify(saveData));
+        
+        // Сохраняем историю (последние 10 сохранений)
+        saveHistory(saveData);
+        
+        return saveData;
+    }
+    
+    // Сохранение пользовательских данных игры
+    function saveCustomGameData() {
+        const gameData = {};
+        
+        // Сохраняем все глобальные переменные игры
+        if (window.gameState) {
+            gameData.gameState = window.gameState;
+        }
+        
+        // Сохраняем переменные из вашей игры
+        if (window.application) {
+            gameData.application = {
+                scores: window.application.scores ? [...window.application.scores] : [],
+                lives: window.application.lives ? [...window.application.lives] : [],
+                globalValues: window.application.gValues ? [...window.application.gValues] : []
+            };
+        }
+        
+        // Сохраняем любые HTML5 localStorage данные
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && !key.startsWith('autosave_')) {
+                try {
+                    gameData[key] = localStorage.getItem(key);
+                } catch(e) {}
+            }
+        }
+        
+        return gameData;
+    }
+    
+    // Сохранение истории автосохранений
+    function saveHistory(currentSave) {
+        let history = localStorage.getItem('autosave_history');
+        history = history ? JSON.parse(history) : [];
+        
+        // Добавляем текущее сохранение в начало
+        history.unshift({
+            timestamp: currentSave.timestamp,
+            date: new Date(currentSave.timestamp).toLocaleString(),
+            title: currentSave.title
+        });
+        
+        // Оставляем только последние 10 сохранений
+        history = history.slice(0, 10);
+        
+        localStorage.setItem('autosave_history', JSON.stringify(history));
+    }
+    
+    // Загрузка последнего автосохранения
+    function loadLastAutosave() {
+        const savedData = localStorage.getItem('autosave_backup');
+        if (!savedData) return false;
+        
+        try {
+            const data = JSON.parse(savedData);
+            
+            // Восстанавливаем пользовательские данные игры
+            if (data.customData) {
+                restoreCustomGameData(data.customData);
+            }
+            
+            // Восстанавливаем позицию прокрутки
+            if (data.scrollX !== undefined && data.scrollY !== undefined) {
+                setTimeout(() => {
+                    window.scrollTo(data.scrollX, data.scrollY);
+                }, 100);
+            }
+            
+            showNotification("🔄 Загружено автосохранение", "#2196F3");
+            return true;
+        } catch(e) {
+            console.error("Ошибка загрузки автосохранения:", e);
+            return false;
+        }
+    }
+    
+    // Восстановление пользовательских данных игры
+    function restoreCustomGameData(data) {
+        // Восстанавливаем состояние игры
+        if (data.gameState) {
+            window.gameState = data.gameState;
+        }
+        
+        // Восстанавливаем данные приложения
+        if (data.application && window.application) {
+            if (data.application.scores) window.application.scores = data.application.scores;
+            if (data.application.lives) window.application.lives = data.application.lives;
+            if (data.application.globalValues) window.application.gValues = data.application.globalValues;
+            
+            // Обновляем отображение
+            if (window.application.run) {
+                for (let i = 0; i < 4; i++) {
+                    if (data.application.scores && window.application.run.update_PlayerObjects) {
+                        window.application.run.update_PlayerObjects(i, 5, data.application.scores[i] || 0);
+                    }
+                }
+            }
+        }
+    }
+    
+    // Показать уведомление
+    function showNotification(message, color = "#4CAF50") {
+        // Создаем элемент уведомления
+        let notification = document.getElementById('autosave_notification');
+        
+        if (!notification) {
+            notification = document.createElement('div');
+            notification.id = 'autosave_notification';
+            notification.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                background: ${color};
+                color: white;
+                padding: 10px 20px;
+                border-radius: 5px;
+                font-family: Arial, sans-serif;
+                font-size: 14px;
+                z-index: 10000;
+                opacity: 0;
+                transition: opacity 0.3s;
+                pointer-events: none;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            `;
+            document.body.appendChild(notification);
+        }
+        
+        notification.style.backgroundColor = color;
+        notification.textContent = message;
+        notification.style.opacity = '1';
+        
+        setTimeout(() => {
+            notification.style.opacity = '0';
+        }, 2000);
+    }
+    
+    // Восстановление после перезагрузки страницы
+    function checkForCrashRecovery() {
+        const crashed = sessionStorage.getItem('autosave_crash_recovery');
+        if (crashed === 'true') {
+            sessionStorage.removeItem('autosave_crash_recovery');
+            showNotification("⚠️ Обнаружен аварийный перезапуск! Загружаем автосохранение...", "#ff9800");
+            setTimeout(() => {
+                if (confirm("Игра была аварийно закрыта. Восстановить последнее автосохранение?")) {
+                    loadLastAutosave();
+                }
+            }, 500);
+        }
+    }
+}
+    
+    // Запуск автосохранения
+    function startAutosave() {
+        if (saveInterval) clearInterval(saveInterval);
+        lastSaveTime = Date.now();
+        saveInterval = setInterval(autoSave, AUTOSAVE_INTERVAL);
+        console.log(`✅ Автосохранение запущено (каждые ${AUTOSAVE_INTERVAL/1000} секунд)`);
+        showNotification("✅ Автосохранение включено", "#4CAF50");
+    }
+    
+    // Остановка автосохранения
+    function stopAutosave() {
+        if (saveInterval) {
+            clearInterval(saveInterval);
+            saveInterval = null;
+            console.log("⏸️ Автосохранение остановлено");
+            showNotification("⏸️ Автосохранение остановлено", "#ff9800");
+        }
+    }
+    
+    // Принудительное сохранение сейчас
+    window.forceSave = function() {
+        performSave();
+        showNotification("💾 Сохранение выполнено!", "#4CAF50");
+    };
+    
+    // Загрузка последнего сохранения
+    window.loadSave = function() {
+        loadLastAutosave();
+    };
+    
+    // Показать историю сохранений
+    window.showSaveHistory = function() {
+        const history = localStorage.getItem('autosave_history');
+        if (!history) {
+            alert("Нет истории сохранений");
+            return;
+        }
+        
+        const saves = JSON.parse(history);
+        let message = "📋 История автосохранений:\n\n";
+        saves.forEach((save, index) => {
+            message += `${index + 1}. ${save.date} - ${save.title}\n`;
+        });
+        message += "\nПоследнее автосохранение будет загружено при перезагрузке страницы.";
+        alert(message);
+    };
+    
+    // Отслеживание закрытия страницы
+    window.addEventListener('beforeunload', function() {
+        // Сохраняем перед закрытием
+        performSave();
+        // Отмечаем, что страница закрывается корректно
+        sessionStorage.setItem('autosave_crash_recovery', 'false');
+    });
+    
+    // Отслеживаем аварийное завершение
+    window.addEventListener('load', function() {
+        checkForCrashRecovery();
+        startAutosave();
+    });
+    
+    // Экспортируем функции в глобальную область
+    window.startAutosave = startAutosave;
+    window.stopAutosave = stopAutosave;
+    window.forceSave = window.forceSave;
+    window.loadSave = window.loadSave;
+    window.showSaveHistory = showSaveHistory;
+    
+    console.log("📀 Система автосохранения загружена");
+})();
+</script>
