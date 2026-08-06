@@ -3,6 +3,7 @@ import json
 import os
 from datetime import datetime
 
+# Указываем, что шаблоны лежат в корневой папке
 app = Flask(__name__, template_folder='.')
 
 MESSAGES_FILE = 'messages.json'
@@ -22,7 +23,7 @@ def save_messages(messages):
 
 @app.route('/')
 def index():
-    # Теперь используется chat.html
+    # Теперь chat.html лежит рядом с app.py
     return render_template('chat.html')
 
 @app.route('/get_messages')
