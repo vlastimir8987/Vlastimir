@@ -3,8 +3,7 @@ import json
 import os
 from datetime import datetime
 
-# Указываем, что шаблоны лежат в корневой папке
-app = Flask(__name__, template_folder='.')
+app = Flask(__name__, template_folder='.')  # шаблоны в корне
 
 MESSAGES_FILE = 'messages.json'
 
@@ -23,7 +22,6 @@ def save_messages(messages):
 
 @app.route('/')
 def index():
-    # Теперь chat.html лежит рядом с app.py
     return render_template('chat.html')
 
 @app.route('/get_messages')
@@ -33,25 +31,18 @@ def get_messages():
 
 @app.route('/send_message', methods=['POST'])
 def send_message():
-    try:
-        name = request.form.get('name', 'Аноним').strip()
-        message = request.form.get('message', '').strip()
-        print(f"Получено: имя={name}, сообщение={message}")  # <-- лог
+    name = request.form.get('name', 'Аноним').strip()
+    message = request.form.get('message', '').strip()
+    if not message:
+        return jsonify({'status': 'error', 'message': 'Сообщение не может быть пустым'})
 
-        if not message:
-            return jsonify({'status': 'error', 'message': 'Сообщение не может быть пустым'})
+    messages = load_messages()
+    messages.append({
+        'name': name,
+        'message': message,
+        'timestamp': datetime.now().strftime('%H:%M:%S')
+    })
+    save_messages(messages)
+    return jsonify({'status': 'ok'})
 
-        messages = load_messages()
-        messages.append({
-            'name': name,
-            'message': message,
-            'timestamp': datetime.now().strftime('%H:%M:%S')
-        })
-        save_messages(messages)
-        return jsonify({'status': 'ok'})
-    except Exception as e:
-        print(f"Ошибка: {e}")  # <-- лог ошибки
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+# (блок if __name__ == '__main__' можно оставить для локального запуска, но Vercel его игнорирует)
