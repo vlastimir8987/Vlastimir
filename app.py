@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory
 import json
 import os
 from datetime import datetime
@@ -20,9 +20,10 @@ def save_messages(messages):
     with open(MESSAGES_FILE, 'w', encoding='utf-8') as f:
         json.dump(messages, f, ensure_ascii=False, indent=2)
 
-@app.route('/')
-def index():
-    return render_template('chat.html')
+# ---------- Чат и API ----------
+@app.route('/chat')
+def chat_page():
+    return render_template('chat.html')   # теперь чат доступен по /chat
 
 @app.route('/get_messages')
 def get_messages():
@@ -45,4 +46,22 @@ def send_message():
     save_messages(messages)
     return jsonify({'status': 'ok'})
 
-# (блок if __name__ == '__main__' можно оставить для локального запуска, но Vercel его игнорирует)
+# ---------- Статические файлы ----------
+# Для всех остальных запросов (например, /index.html, /videos.html, /images/...)
+# отдаём файлы из корня проекта.
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_static(path):
+    if not path:
+        # Если запрос к корню, отдаём index.html
+        return send_from_directory('.', 'index.html')
+    # Проверяем, существует ли файл
+    if os.path.exists(path) and not os.path.isdir(path):
+        return send_from_directory('.', path)
+    else:
+        # Если файл не найден, можно вернуть 404
+        return "Страница не найдена", 404
+
+# ---------- Запуск (для локального тестирования) ----------
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000)
