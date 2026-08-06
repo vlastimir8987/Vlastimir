@@ -33,19 +33,25 @@ def get_messages():
 
 @app.route('/send_message', methods=['POST'])
 def send_message():
-    name = request.form.get('name', 'Аноним').strip()
-    message = request.form.get('message', '').strip()
-    if not message:
-        return jsonify({'status': 'error', 'message': 'Сообщение не может быть пустым'})
+    try:
+        name = request.form.get('name', 'Аноним').strip()
+        message = request.form.get('message', '').strip()
+        print(f"Получено: имя={name}, сообщение={message}")  # <-- лог
 
-    messages = load_messages()
-    messages.append({
-        'name': name,
-        'message': message,
-        'timestamp': datetime.now().strftime('%H:%M:%S')
-    })
-    save_messages(messages)
-    return jsonify({'status': 'ok'})
+        if not message:
+            return jsonify({'status': 'error', 'message': 'Сообщение не может быть пустым'})
+
+        messages = load_messages()
+        messages.append({
+            'name': name,
+            'message': message,
+            'timestamp': datetime.now().strftime('%H:%M:%S')
+        })
+        save_messages(messages)
+        return jsonify({'status': 'ok'})
+    except Exception as e:
+        print(f"Ошибка: {e}")  # <-- лог ошибки
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
